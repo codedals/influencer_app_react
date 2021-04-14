@@ -1,0 +1,158 @@
+.login-main {
+    background: rgb(45,47,74);
+    color: #fff;
+    height: 95%;
+}
+
+input[type=text] {
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid #fff;
+    outline: none;
+}
+
+::placeholder { /* Chrome, Firefox, Opera, Safari 10.1+ */
+  color: #fff;
+  opacity: 1; /* Firefox */
+}
+
+:-ms-input-placeholder { /* Internet Explorer 10-11 */
+  color: #fff;
+}
+
+.login-form {
+    max-width: 450pt;
+    padding: 40pt 20pt 0pt;
+    color: #fff;
+
+}
+
+.login-form-button {
+    margin-left: 35%;
+    margin-right: 35%;
+    display: inline-block;
+    Background: rgb(67, 90, 246);
+    border: none;
+}
+
+.wrapper {
+  display:flex;
+  flex-direction:column;
+}
+.grid-row {
+  margin-bottom: 1em
+}
+.grid-row, .grid-header {
+  display:flex;
+/*   flex: 1 0 auto; */
+/*   height: auto; */
+}
+
+.grid-header {
+  align-items: flex-end;
+}
+.header-item {
+  width:100px;
+  text-align:center;
+/*   border:1px solid transparent; */
+}
+
+.subtitle {
+  font-size: 0.7em;
+}
+.flex-item:before {
+  content: '';
+  padding-top:26%;
+}
+.flex-item {
+  display:flex;
+/*   flex-basis:25%; */
+  width:100%;
+  justify-content: center;
+  align-items:center;
+/*   text-align:left; */
+  font-size: 1.15em;
+  font-weight:normal;
+  color:#fff;
+  border:none;
+}
+
+/* HTML5 Boilerplate accessible hidden styles */
+
+[type="radio"], [type="checkbox"] {
+  border: 0;
+  clip: rect(0 0 0 0);
+  height: 1px; margin: -1px;
+  overflow: hidden;
+  padding: 0;
+  position: absolute;
+  width: 1px;
+}
+
+/* One radio button per line */
+label {
+  /*display: block;*/
+  cursor: pointer;
+}
+
+span.brand::before{
+    padding-top: 5%;
+    padding-bottom: 5%;
+    content:'BRAND';
+    background: rgb(116,76,246);
+}
+
+span.agency::before{
+    padding-top: 5%;
+    padding-bottom: 5%;
+    content:'AGENCY';
+    background: rgb(200,58,67);
+}
+
+span.creator::before{
+    padding-top: 5%;
+    padding-bottom: 5%;
+    content:'CREATOR';
+    background: rgb(66,93,111);
+}
+
+span.other::before{
+    padding-top: 5%;
+    padding-bottom: 5%;
+    content:'OTHER';
+    box-shadow: 0 0 0 0.15em #555;
+    background: rgb(44,47,72);
+}
+
+/* the basic, unchecked style */
+[type="radio"] + span:before,
+[type="checkbox"] + span:before{
+    display: inline-block;
+    width: 10.5em;
+    height: 2.5em;
+    vertical-align: -1.0em;
+    border-radius:.25em;
+    border: none;
+    transition: 0.5s ease all;
+    text-align: center;
+}
+
+[type="checkbox"] + span:before {
+  margin-right: 0.75em;
+}
+
+/* the checked style using the :checked pseudo class */
+[type="radio"]:checked + span:before,
+[type="checkbox"]:checked + span:before{
+    filter: brightness(80%);
+    box-shadow: 0 0 0 0.25em #fff;
+}
+
+
+/* never forget focus styling */
+[type="radio"]:focus span:after {
+  content: '\0020\2190';
+  font-size: 1.5em;
+  line-height: 1;
+  vertical-align: -0.125em;
+}

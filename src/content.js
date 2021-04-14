@@ -1,0 +1,940 @@
+/*global chrome*/
+/* src/content.js */
+import React from 'react';
+import ReactDOM from 'react-dom';
+import Backbone from 'backbone';
+import "./content.css";
+import "antd/dist/antd.css";
+import ProfileHeader from "./components/profile_header.js";
+import ScrollDown from "./components/scrolldown.js"
+import EngagementComponent from "./components/engagement.js";
+import Login from "./components/login.js";
+import { Layout } from 'antd';
+import db from './utils/storage';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
+import {Button} from 'antd';
+import ListStore from './stores/listStore.js'
+
+import {observer} from 'mobx-react';
+
+const { Header, Content, Footer} = Layout;
+
+var helpers = require('./utils/helpers.js');
+var _ = require('underscore');
+
+var profileRegex =  /^\/([\w.\-_]+)\/$/
+var enrichEnabled = true;
+var vent = _.extend({}, Backbone.Events);
+let profiles;
+window.db = db;
+
+@observer
+class Main extends React.Component {
+
+    UNSAFE_componentWillMount(){
+        setTimeout(() => this.forceUpdate(), 10);
+        var user_id = localStorage.getItem('IRUser');
+        if (user_id != null){
+            this.setState({
+                loginComplete: true,
+                user_id: user_id
+            });
+        }
+    }
+
+    refreshState(){
+        console.log("New profile: ", this.state.profile);
+        this.setState({
+            refreshed: true
+        });
+
+        setTimeout(() => this.forceUpdate(), 10);
+    }
+
+    constructor(props) {
+    	super(props);
+        window.mainComponent = this;
+    	this.state = {
+            refreshed: true,
+    	    profile: {
+      		attributes: {
+                    postsPerDay: 0.00,
+                    avgCommentsPerImage: 0.00,
+                    avgLikes: 0.00,
+                    engagementRate: 0.00,
+                    profile_pic_url: "./assets/profile-pic-placeholder.jpg",
+                    imagesCount: 0,
+                    videosCount: 0,
+                    engagementRateVideos: 0.00,
+                    engagementRateImages: 0.00,
+                    avgLikesPerImage: 0.00,
+                    avgCommentsPerVideo: 0.00,
+                    avgViewsPerVideo: 0.00
+                },
+                in_favorites: false
+      	    },
+            loginComplete: false,
+            showScrollFooter: false,
+            user_id: null,
+            current_profile: null,
+            data_loaded: false,
+            favorites: []
+    	}
+    }
+
+    addListItem(type, items){
+        if(items !=undefined && items.length > 0){
+            items.forEach(item => {
+                this.props.listStore.addItem(type, item);
+            })
+        }
+    }
+
+    subscribeToEvents() {
+        document.addEventListener('navigate_profile', e => this.onProfileLoaded());
+        document.addEventListener('profile_page_loaded', e => this.onProfileLoaded());
+        document.addEventListener('timeline_data', e => {
+            const url = `https://${ window.location.hostname }` + e.detail.requestData.url;
+            const request = requestsData.addRequest(url).toJSON();
+
+            if (!requestsData.headers) {
+                requestsData.headers = e.detail.requestData.headers
+            }
+
+            vent.trigger(`timeline_data:${ request.user_id }`, e.detail);
+        });
+    }
+
+    onProfileLoaded() {
+        window.location.reload();
+
+        var username = /^\/([\w.\-_]+)\/$/.exec(document.location.pathname);
+        username = username ? username[1] : null;
+        if (username) {
+            return profiles.loadProfile(username)
+                .then(data => this.addProfile(data))
+                .then(() => this.showProfile(username));
+        }
+    }
+
+    waitForEntryData() {
+        return new Promise(function(resolve, reject){
+            document.addEventListener('entry_data', e => resolve(e.detail));
+        });
+    }
+
+    addRequest(url) {
+        const params = JSON.parse(extractQueryParam(url, 'variables'));
+        return this.add({
+            user_id: params.id,
+            url: url,
+            nextPageToken: params.after
+        }, {merge: true});
+    }
+
+    componentDidMount(){
+    	profiles = new ProfilesCollection();
+    	this.subscribeToEvents();
+
+    	this.waitForEntryData()
+    	    .then(data => this.addProfile(data))
+    	    .catch(data => data)
+    	    .then(profile => {
+                window.db.favorites.get(profile.attributes.username).then(favorite => {
+                    this.setState({
+                        profile : {
+                            in_favorites: true,
+                            attributes: this.state.profile.attributes
+                        }
+                    });
+                }).catch (function (e) {
+	            console.log("Error: ", e);
+                });
+    		this.showProfile(profile.id)
+	    });
+    }
+
+    addProfile(data) {
+	//TODO: Add proper private  profile
+	//if (!helpers.isEmpty(data) && !data['graphql']['user']['is_private'] {
+	if (data) {
+            console.log("DATA IS HERE: ", data);
+            app.style.display = "";
+            target_location.classList.add('with-sidebar');
+            return profiles.addProfile(data);
+        } else {
+            app.style.display = "none";
+            target_location.classList.remove('with-sidebar');
+            return Promise.resolve({})
+        }
+    }
+
+    showProfile(profile_id) {
+    	var profile = profiles.get(profile_id);
+        console.log("Showing Profile: ", profile);
+
+        profile.initialPostsProcessed.then(() => {
+            this.setState({
+                profile:{
+                    attributes: profile.attributes,
+                },
+                data_loaded: true
+
+            });
+            console.log("Our state: ", this.state.profile);
+            //update our view;
+        });
+    }
+
+    removeFromFavorite(name){
+        db.table('favorites').delete(this.state.profile.attributes.username).then(() => {
+            this.refreshState();
+        })
+    }
+
+    updateFavorites(url, name) {
+        //if favorite.name already exist, remove that favorite object from Array
+        console.log('updateFavorites');
+
+        const favorite = {
+            profileUrl:this.state.profile.attributes.profile_pic_url,
+            username:this.state.profile.attributes.username
+        };
+        db.table('favorites')
+            .put(favorite)
+            .then(() => {
+                this.setState({
+                    profile: {
+                        in_favorites: true,
+                        attributes: this.state.profile.attributes
+                    },
+                    favorites: [...this.state.favorites, ...[{ profileUrl: this.state.profile.attributes.profile_pic_url,
+                                                               username: this.state.profile.attributes.username}]
+                               ]
+                });
+
+            });
+    }
+
+    loginComplete(user_id=null) {
+        window.localStorage.setItem('IRUser', user_id);
+        this.setState({
+            loginComplete: true,
+            user_id: user_id
+        });
+    }
+
+    showScrollFooter() {
+      this.setState({ showScrollFooter: true });
+    }
+
+    hideScrollFooter() {
+      this.setState({ showScrollFooter: false });
+    }
+
+    render() {
+	const {profile} = this.props;
+        const listStore = this.props.listStore;
+        let engagement_component;
+        if(!this.state.data_loaded){
+            engagement_component = ""
+        } else{
+            window.db.favorites.get(this.state.profile.attributes.username).then(favorite => {
+                if (favorite){
+                    renderRemoveButton(this.removeFromFavorite.bind(this));
+                }else{
+                    renderFavoritesButton(this.updateFavorites.bind(this));
+                }
+            }).catch (function (e) {
+	        console.log("Error: ", e);
+            });
+            engagement_component = <EngagementComponent listStore={this.props.listStore} refreshed={this.state.refreshed} window={window.mainComponent} profile={this.state.profile} favoritesCallback={this.updateFavorites} favorites={this.state.favorites} showFooter={this.showScrollFooter.bind(this)} hideFooter={this.hideScrollFooter.bind(this)}/>
+        }
+
+        return (
+            <div id="influencer-root">
+              <div className={'influencer-main'}>
+                <Layout style={{ height: '91%'}}>
+              	  <div style={{ backgroundColor: 'rgb(38,40,70)', height:'75px', paddingLeft: '0', paddingRight: '10px', width: '100%'}}>
+              	    <ProfileHeader profile={this.state.profile} complete={this.state.loginComplete}/>
+              	  </div>
+              	  <Content>
+            	    {
+                        !this.state.loginComplete ?
+                            <Login login={this.loginComplete.bind(this)} />
+                        :
+                        engagement_component
+                    }
+              	  </Content>
+                </Layout>
+              </div>
+            </div>
+        )
+    }
+}
+
+function renderFavoritesButton(favoriteCallback){
+
+    var remove_button = document.getElementById("remove-button");
+    if (remove_button != null){
+        remove_button.remove();
+    }
+
+    window.db.favorites.get(window.mainComponent.state.profile.attributes.username).then(favorite => {
+        if(favorite){
+            console.log("Remove this user: ", favorite);
+            //render remove
+        }else{
+            var follow_unfollow_target = document.getElementsByClassName("BY3EC")[0];
+            var favorite_button = document.getElementById("favorites-button");
+            if (favorite_button){
+                return;
+            }
+            if(follow_unfollow_target != undefined){
+                var favorite_button = document.createElement("div");
+                favorite_button.id = "favorites-button"
+                follow_unfollow_target.insertAdjacentElement("afterend", favorite_button);
+                ReactDOM.render(<FavoriteButton callback={favoriteCallback} />, favorite_button);
+            }
+        }
+
+    })
+
+}
+
+
+function renderRemoveButton(removeCallback){
+
+
+    var favorite_button = document.getElementById("favorites-button");
+    if (favorite_button != null){
+        favorite_button.remove();
+    }
+
+    var existing_remove = document.getElementById("remove-button");
+    if (existing_remove){
+        return;
+    }else{
+        var follow_unfollow_target = document.getElementsByClassName("BY3EC")[0];
+        if(follow_unfollow_target != undefined){
+            var remove_button = document.createElement("div");
+            remove_button.id = "remove-button"
+            follow_unfollow_target.insertAdjacentElement("afterend", remove_button);
+            ReactDOM.render(<RemoveButton callback={removeCallback} />, remove_button);
+        }
+    }
+}
+
+
+class FavoriteButton extends React.Component {
+    constructor(props){
+        super(props);
+    }
+
+    componentDidMount() {
+        //Hack to force re-render so FontAwesome is loaded correctly
+        setTimeout(() => this.forceUpdate(), 10)
+    }
+
+    componentWillReceiveProps() {
+        //Hack to force re-render so FontAwesome is loaded correctlyq
+        setTimeout(() => this.forceUpdate(), 10)
+    }
+
+
+    addToFavoritesClick(){
+        this.props.callback('url', 'name');
+    }
+
+    render() {
+        return (
+            <div style={{paddingLeft:"5%"}}>
+              <Button
+                style={{backgroundColor: "rgb(120,200,199)",
+                        fontWeight: "bold",
+                        border: "none",
+                        outline:"none",
+                        height: "22pt"
+                       }}
+                type="primary"
+                className="add-to-favorites-button"
+                onClick={this.addToFavoritesClick.bind(this)}>
+                Add to Favorites
+              </Button>
+            </div>
+        )
+    }
+}
+
+
+class RemoveButton extends React.Component {
+    constructor(props){
+        super(props);
+    }
+
+    componentDidMount() {
+        //Hack to force re-render so FontAwesome is loaded correctly
+        setTimeout(() => this.forceUpdate(), 10)
+    }
+
+    componentWillReceiveProps() {
+        //Hack to force re-render so FontAwesome is loaded correctlyq
+        setTimeout(() => this.forceUpdate(), 10)
+    }
+
+    removeFavoritesClick(){
+        //grab data here and pass to url and name
+        this.props.callback('url', 'name');
+    }
+
+    render() {
+        return (
+            <div style={{paddingLeft:"5%"}}>
+              <Button
+                style={{backgroundColor: "rgb(120,200,199)",
+                        fontWeight: "bold",
+                        border: "none",
+                        outline:"none",
+                        height: "22pt"
+                       }}
+                type="primary"
+                className="add-to-favorites-button"
+                icon="star"
+                theme="filled"
+                onClick={this.removeFavoritesClick.bind(this)}>
+              </Button>
+            </div>
+        )
+    }
+}
+
+
+
+var ProfileModel = Backbone.Model.extend({
+    idAttribute: 'username',
+    defaults: {
+        rawData: {},
+    },
+    breakdownFields: ['Mentions', 'Hashtags', 'Image Content', 'Tagged Locations', 'Brand Partners', 'Tagged Accounts'],
+
+    initialize() {
+        var data = this.toJSON();
+        this.posts = new Posts();
+        this.firstPostsLoaded = false;
+        //TODO --> this is where we update our state
+        this.listenTo(this.posts, 'update', () => {
+            this.calculateAverages();
+            this.parseKeywords();
+        });
+
+        data.followersCount = data['edge_followed_by']['count'] || 0;
+        this.set(data);
+        //Short code is identifier:Bwxe4TMAeci
+        const initialPosts = (data['edge_owner_to_timeline_media']['edges'] || []).map(item => item.node);
+
+        this.initialPostsProcessed = new Promise((resolve, reject) => {
+            if (initialPosts.length) {
+                this.enrichPostsData(initialPosts)
+                    .then(posts => this.processPosts(posts))
+                    .then(resolve);
+            } else {
+                resolve();
+            }
+        });
+
+        if (requestsData.get(data.user_id)) {
+            this.loadFirstPosts();
+        }
+
+        this.listenTo(vent, `timeline_data:${ data.user_id }`, data => {
+            this.onNewPostsData(data.timeline);
+            this.loadFirstPosts();
+            window.mainComponent.setState({
+                refreshed:false
+            })
+            window.mainComponent.refreshState();
+        });
+    },
+
+    onNewPostsData(data) {
+        const posts = Array.isArray(data) ? data : data['data']['user']['edge_owner_to_timeline_media']['edges'].map(item => item.node);
+        this.enrichPostsData(posts).then(posts => this.processPosts(posts));
+    },
+
+    processPosts (posts) {
+        if (!posts || !posts.length) {
+            return;
+        }
+
+        const account = this.toJSON();
+        posts = posts || [];
+        posts = posts.map(post => {
+            post = post.node ? post.node : post;
+            post.followersCount = account.followersCount;
+            return post;
+        });
+        this.posts.add(posts);
+        return Promise.resolve();
+    },
+
+    avg(array, property) {
+	var val = array.map(item => item[property]).reduce(function(a, b) { return a + b; }, 0) / (array.length || 1);
+	return val;
+    },
+
+
+
+
+    calculateAverages() {
+        const account = this.toJSON();
+        const posts = this.posts.toJSON();
+        const videoPosts = posts.filter(post => post.type === 'video');
+        const imagePosts = posts.filter(post => post.type !== 'video');
+        const firstPostDate = posts[posts.length - 1].postDate;
+
+        var today = new Date();
+        var seven_days_ago =  today.setDate(today.getDate() - 7);
+        var thirty_days_ago = today.setDate(today.getDate() - 30);
+        var ninety_days_ago = today.setDate(today.getDate() - 90);
+
+        const posts7 = posts.filter(post => new Date(post.taken_at_timestamp * 1000) < seven_days_ago)
+        const posts30 = posts.filter(post => new Date(post.taken_at_timestamp * 1000) < thirty_days_ago)
+        const posts90 = posts.filter(post => new Date(post.taken_at_timestamp * 1000) < ninety_days_ago)
+        const videos7 = videoPosts.filter(post => new Date(post.taken_at_timestamp * 1000) < seven_days_ago)
+        const videos30 = videoPosts.filter(post => new Date(post.taken_at_timestamp * 1000) < thirty_days_ago)
+        const videos90 = videoPosts.filter(post => new Date(post.taken_at_timestamp * 1000) < ninety_days_ago)
+        const images7 = imagePosts.filter(post => new Date(post.taken_at_timestamp * 1000) < seven_days_ago)
+        const images30 = imagePosts.filter(post => new Date(post.taken_at_timestamp * 1000) < thirty_days_ago)
+        const images90 = imagePosts.filter(post => new Date(post.taken_at_timestamp * 1000) < ninety_days_ago)
+
+        account.avgLikes = this.avg(posts, 'likesCount');
+        account.avgComments = this.avg(posts, 'commentsCount');
+        account.postsPerDay = posts.length / ((Date.now() - firstPostDate) / 1000 / 3600 / 24);
+
+        //Ranged Likes
+        account.avgLikes7 = this.avg(posts7, 'likesCount');
+        account.avgComments7 = this.avg(posts7, 'commentsCount');
+        account.postsPerDay7 = posts7.length / ((Date.now() - firstPostDate) / 1000 / 3600 / 24);
+
+        account.avgLikes30 = this.avg(posts30, 'likesCount');
+        account.avgComments30 = this.avg(posts30, 'commentsCount');
+        account.postsPerDay30 = posts30.length / ((Date.now() - firstPostDate) / 1000 / 3600 / 24);
+
+        account.avgLikes90 = this.avg(posts90, 'likesCount');
+        account.avgComments90 = this.avg(posts90, 'commentsCount');
+        account.postsPerDay90 = posts90.length / ((Date.now() - firstPostDate) / 1000 / 3600 / 24);
+        //End ranged likes
+
+
+        account.engagementRate = this.avg(posts, 'engagements') / (account.followersCount || 1);
+
+        //Ranged Engagement
+        account.engagementRate7 = this.avg(posts7, 'engagements') / (account.followersCount || 1);
+        account.engagementRate30 = this.avg(posts30, 'engagements') / (account.followersCount || 1);
+        account.engagementRate90 = this.avg(posts90, 'engagements') / (account.followersCount || 1);
+        //End ranged engagement
+
+        account.avgLikesPerImage = this.avg(imagePosts, 'likesCount');
+        account.avgCommentsPerImage = this.avg(imagePosts, 'commentsCount');
+        account.engagementRateImages = this.avg(imagePosts, 'engagements') / (account.followersCount || 1);
+
+
+        account.avgLikesPerImage7 = this.avg(images7, 'likesCount');
+        account.avgCommentsPerImage7 = this.avg(images7, 'commentsCount');
+        account.engagementRateImages7 = this.avg(images7, 'engagements') / (account.followersCount || 1);
+
+        account.avgLikesPerImage30 = this.avg(images30, 'likesCount');
+        account.avgCommentsPerImage30 = this.avg(images30, 'commentsCount');
+        account.engagementRateImages30 = this.avg(images30, 'engagements') / (account.followersCount || 1);
+
+        account.avgLikesPerImage90 = this.avg(images90, 'likesCount');
+        account.avgCommentsPerImage90 = this.avg(images90, 'commentsCount');
+        account.engagementRateImages90 = this.avg(images90, 'engagements') / (account.followersCount || 1);
+
+
+        account.avgLikesPerVideo = this.avg(videoPosts, 'likesCount');
+        account.avgCommentsPerVideo = this.avg(videoPosts, 'commentsCount');
+        account.avgViewsPerVideo = this.avg(videoPosts, 'viewsCount');
+        account.engagementRateVideos = this.avg(videoPosts, 'engagements') / (account.followersCount || 1);
+
+
+        account.avgLikesPerVideo7 = this.avg(videos7, 'likesCount');
+        account.avgCommentsPerVideo7 = this.avg(videos7, 'commentsCount');
+        account.avgViewsPerVideo7 = this.avg(videos7, 'viewsCount');
+        account.engagementRateVideos7 = this.avg(videos7, 'engagements') / (account.followersCount || 1);
+
+        account.avgLikesPerVideo30 = this.avg(videos30, 'likesCount');
+        account.avgCommentsPerVideo30 = this.avg(videos30, 'commentsCount');
+        account.avgViewsPerVideo30 = this.avg(videos30, 'viewsCount');
+        account.engagementRateVideos30 = this.avg(videos30, 'engagements') / (account.followersCount || 1);
+
+        account.avgLikesPerVideo90 = this.avg(videos90, 'likesCount');
+        account.avgCommentsPerVideo90 = this.avg(videos90, 'commentsCount');
+        account.avgViewsPerVideo90 = this.avg(videos90, 'viewsCount');
+        account.engagementRateVideos90 = this.avg(videos90, 'engagements') / (account.followersCount || 1);
+
+        account.imagesCount = imagePosts.length;
+        account.videosCount = videoPosts.length;
+
+        account.imagesCount7 = images7.length;
+        account.videosCount7 = videos7.length;
+
+        account.imagesCount30 = images30.length;
+        account.videosCount30 = videos30.length;
+
+        account.imagesCount90 = images90.length;
+        account.videosCount90 = videos90.length;
+        window.mainComponent.props.listStore.setAccount(account);
+        this.set(account);
+    },
+
+    postsWithTag(key, tag){
+        var posts = this.posts;
+    },
+
+    parseKeywords() {
+
+        var account = this.toJSON(),
+            posts = this.posts.toJSON(),
+            fields = this.breakdownFields,
+            result = {};
+
+        //we can add our posts shortcodes here
+        posts.forEach(post => {
+            fields.forEach(item => {
+                const key = item.toCamelCase();
+                if (post[key]) {
+                    result[item] = (result[item] || []).concat(post[key]);
+                    result[item][post[key]] = (result[item][post[key]] || []).concat(post);
+                }
+            });
+        });
+
+        fields.forEach(key => {
+            const values = result[key];
+             result[key] = _.chain(values)
+                .countBy(keyword => keyword)
+                .mapObject((num, keyword) => {
+                    return {
+                        //redefine num and keyword as computed2
+                        Num: num,
+                        Keyword: keyword,
+                        Frequency: num / posts.length,
+                        Link: this.getLink(key, keyword),
+                        Posts: getAssociatedPosts(key, keyword, posts)
+                    };
+                })
+                .values()
+                .value()
+                .sort((prev, next) => { return next.Num - prev.Num; });
+        });
+        window.mainComponent.addListItem("hashtag",result["Hashtags"]);
+        window.mainComponent.addListItem("mentions",result["Mentions"]);
+        window.mainComponent.addListItem("images",result["Image Content"]);
+        window.mainComponent.addListItem("locations",result["Tagged Locations"]);
+        window.mainComponent.addListItem("taggedaccounts",result["Tagged Accounts"]);
+        window.mainComponent.addListItem("partners",result["Brand Partners"]);
+        _.extend(account, result);
+        this.set(account);
+    },
+
+    getLink(type, keyword) {
+        if (['Mentions', 'Brand Partners', 'Tagged Accounts'].includes(type)) {
+            return `https://www.instagram.com/${ keyword.replace(/[@]/g, '') }/`
+        } else if (type === 'Hashtags') {
+            return `https://www.instagram.com/explore/tags/${ keyword.replace(/[#]/g, '') }/`;
+        } else if (type === 'Tagged Locations') {
+            const locationId = this.posts.toJSON().find(function(post){
+                return (post['rawData']['location'] || {})['name'] === keyword;
+            }).rawData.location.id;
+            return `https://www.instagram.com/explore/locations/${ locationId }/`;
+        } else {
+            return '';
+        }
+    },
+
+    loadFirstPosts() {
+        if (this.firstPostsLoaded) {
+            return;
+        }
+
+        this.firstPostsLoaded = true;
+        this.loadPosts(100);
+    },
+
+    async loadPosts(count) {
+        let posts = [];
+        const requestData = requestsData.get(this.get('user_id'));
+
+        while (count > 0) {
+            let loadedPosts = await this.getPosts(requestData.get('nextPageToken'));
+            posts = posts.concat(loadedPosts.posts);
+            requestData.set('nextPageToken', loadedPosts.nextPageToken);
+            count -= 50;
+        }
+
+        return this.onNewPostsData(posts);
+    },
+
+    async getPosts(pageToken) {
+        const requestData = requestsData.get(this.get('user_id'));
+        const initialUrl = requestData.get('url').replace('first%22%3A12', 'first%22%3A50');
+        let url;
+
+        if (pageToken) {
+            url = new URL(initialUrl);
+            let variables = JSON.parse(extractQueryParam(initialUrl, 'variables'));
+            variables.after = pageToken;
+            url.searchParams.set('variables', JSON.stringify(variables));
+            url = url.toString();
+        } else {
+            url = initialUrl;
+        }
+
+        return fetch(url, {headers: requestsData.headers})
+            .then(res => res.json())
+            .then(response => {
+                const posts = response['data']['user']['edge_owner_to_timeline_media']['edges'].map(item => item.node);
+                const pageInfo = response['data']['user']['edge_owner_to_timeline_media']['page_info'];
+
+                return {
+                    posts,
+                    nextPageToken: pageInfo.has_next_page ? pageInfo.end_cursor : null
+                };
+            });
+    },
+
+    enrichPostsData(posts) {
+        if (!enrichEnabled) {
+            return Promise.resolve(posts);
+        }
+
+        const promises = posts.map(post => {
+            return new Promise((resolve, reject) => {
+                const url = `https://www.instagram.com/p/${ post.shortcode }/?__a=1`;
+                fetch(url).then(res => res.json())
+                    .catch(e => {console.log(e); return {};})
+                    .then(res => {
+                        Object.assign(post, res.graphql.shortcode_media);
+                        resolve(post);
+                    });
+            });
+        });
+
+        return Promise.all(promises);
+    }
+});
+
+function getAssociatedPosts(type, keyword, posts){
+    var associatedPosts = [];
+    posts.forEach(post => {
+        if (post[type.toCamelCase()])
+            if (post[type.toCamelCase()].includes(keyword)){
+                associatedPosts = associatedPosts.concat(post);
+            }
+    })
+    return associatedPosts;
+}
+
+
+
+var ProfilesCollection = Backbone.Collection.extend({
+    model: ProfileModel,
+
+    loadProfile(username) {
+        if (this.get(username)) {
+            return Promise.resolve(this.get(username))
+        } else {
+            return this.fetchProfile(username);
+        }
+    },
+
+    fetchProfile(username) {
+        const url = `https://instagram.com/${ username }/?__a=1`;
+        return fetch(url)
+            .then(res => res.json());
+    },
+
+    addProfile(data){
+        let profile;
+        if (data.graphql && data.graphql.user) {
+            profile = data['graphql']['user'];
+        } else {
+            profile = data;
+        }
+        profile.rawData = Object.assign({}, profile);
+        profile.user_id = profile.id;
+        delete profile.id;
+        return this.add(profile, { merge: true });
+    }
+});
+
+
+
+var Post = Backbone.Model.extend({
+    defaults: {
+        caption: '',
+        type: '',
+        likesCount: null,
+        commentsCount: null,
+        engagements: null,
+        engagementRate: null,
+        followersCount: null,
+    },
+
+    typesMap: {
+        'GraphSidecar': 'carousel',
+        'GraphVideo': 'video',
+        'GraphImage': 'image',
+    },
+
+    initialize() {
+        this.parse();
+        this.calculateEngagementRate();
+        this.parseAccessibilityCaption();
+        this.parseTaggedAccounts();
+    },
+
+    parse() {
+        const post = this.toJSON();
+        var result = {rawData: Object.assign({}, post)};
+        result.taggedLocations = (post['location'] || {})['name'];
+
+	if (post['edge_media_to_caption']['edges'][0]){
+            result.caption = post['edge_media_to_caption']['edges'][0]['node']['text'] || '';
+        } else{
+            result.caption = '';
+        }
+
+        //maybe this isnt the best location
+	if (post['edge_media_to_sponsor_user']['edges'][0]){
+	    result.brandPartners = post['edge_media_to_sponsor_user']['edges'][0]['node']['sponsor']['username'];
+	}else if(true){
+	    result.brandPartners = null;
+	}else {
+            result.brandPartners = null;
+        };
+        result.isPaid = !!result.sponsor;
+        result.postDate = post.taken_at_timestamp * 1000;
+
+        result.mentions = result.caption.match(/(@[\w\d_]+)/g) || [];
+        result.hashtags = result.caption.match(/(#[\w\d_]+)/g) || [];
+        result.type = this.typesMap[post.__typename] || 'image';
+        result.likesCount = post['edge_media_preview_like']['count'] || 0;
+        result.commentsCount = post['edge_media_to_comment']['count'] || 0;
+        result.viewsCount = post.video_view_count || 0;
+        result.engagements = result.likesCount + result.commentsCount;
+        this.set(result);
+        return this.toJSON();
+    },
+
+    calculateEngagementRate () {
+        return this.get('engagements') / (this.get('followersCount') || 1);
+    },
+
+    parseAccessibilityCaption() {
+        let rawData = this.get('rawData');
+        let caption = '';
+        let contents = [];
+
+        if (this.get('type') === 'carousel') {
+            const children = rawData['edge_sidecar_to_children.edges'] || [];
+            caption = children.map(item => item.node.accessibility_caption).join(' ');
+        } else {
+            caption = rawData.accessibility_caption || '';
+        }
+
+        contents = caption.replace(/(Image may contain: )|(No automatic alt text available\.)|(and )|([,]?a )|(,)/g, '')
+            .replace(/(1|\d|one or more) (people|person)|(people standing)/g, ' people ')
+            .replace(/(text that says '\w+')/g, ' text ')
+            .replace(/\s+/g, ' ')
+            .trim()
+            .split(' ')
+            .filter(item => item);
+
+        contents = _.uniq(contents);
+
+        this.set('imageContent', contents);
+    },
+
+    parseTaggedAccounts() {
+        let rawData = this.get('rawData');
+        let taggedAccounts = (rawData['edge_media_to_tagged_user']['edges'] || [])
+            .map(item => '@' + item.node.user.username);
+        this.set('taggedAccounts', taggedAccounts || []);
+    }
+});
+
+var Posts = Backbone.Collection.extend({
+    model: Post
+});
+
+var RequestsMetadata = Backbone.Collection.extend({
+    modelId: function(attrs) {
+        return attrs.user_id;
+    },
+
+    addRequest(url) {
+        const params = JSON.parse(extractQueryParam(url, 'variables'));
+        return this.add({
+            user_id: params.id,
+            url: url,
+            nextPageToken: params.after
+        }, {merge: true});
+    }
+});
+
+const requestsData = new RequestsMetadata();
+
+//COMMENTING OUT CHROME SPECIFIC SECTION
+
+const app = document.createElement('div');
+app.id = "influencer-root";
+
+const target_location = document.querySelectorAll('#react-root section main')[0];
+//target_location.classList.add('with-sidebar');
+target_location.appendChild(app);
+ReactDOM.render(<Main listStore={ListStore}/>, app);
+
+app.style.display = "none";
+//Target class="v1Nh3";
+//a.firstElementChild.href == "https://www.instagram.com/p/Bwxe4TMAeci/"
+
+chrome.runtime.onMessage.addListener(
+   function(request, sender, sendResponse) {
+       if(request.message === "clicked_browser_action") {
+        toggle();
+      }
+   }
+);
+
+
+function toggle(){
+   if(app.style.display === "none"){
+       app.style.display = "block";
+       target_location.classList.add('with-sidebar');
+   }else{
+       app.style.display = "none";
+       target_location.classList.remove('with-sidebar');
+   }
+}
+
+String.prototype.toCamelCase = function () {
+    let words = this.replace(/[\-_\s]+/g, ' ').replace(/\s+/g, ' ').split(' ');
+    return words.map((word, index) => {
+        return index === 0 ? word.toLowerCase() : ucfirst(word.toLowerCase());
+    }).join('');
+};
+
+function ucfirst(str) {
+    var firstLetter = str.substr(0, 1);
+    return firstLetter.toUpperCase() + str.substr(1);
+}
+
+function extractQueryParam(url, param) {
+    url = new URL(url);
+    return url.searchParams.get(param);
+}
+
+
+export default Main;

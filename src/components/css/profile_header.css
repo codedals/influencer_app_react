@@ -1,0 +1,84 @@
+.profile-header {
+  z-index: 1;
+  position: relative;
+  color: #fff;
+  text-align: center;
+  background-color: transparent;
+}
+
+.profile-header{
+  height: 100%;
+  background: #00bcd4;
+  height: 75px;
+  text-align: center;
+  -webkit-transform: skewX(-30deg);
+  -moz-transform: skewX(-30deg);
+  -ms-transform: skewX(-30deg);
+  -o-transform: skewX(-30deg);
+  transform: skewX(-30deg);
+  -webkit-backface-visibility: hidden;
+  backface-visibility: initial;
+  background: rgb(67,70,110);
+  overflow: hidden;
+
+}
+
+.profile-header .skew{
+  transform: skewX(30deg);
+  height: 75px;
+  line-height: 64px;
+  font-size:large;
+  text-align: left;
+  padding-left:10%;
+}
+
+.profile-header .login-skew{
+  transform: skewX(30deg);
+  height: 75px;
+  line-height: 64px;
+  text-align: left;
+  padding-left: 65px;
+}
+
+.profile-header .skew .header-inner {
+  padding: 20px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.profile-app-image{
+  overflow: hidden;
+  color: rgb(3,21,39);
+  margin-right: -52px;
+}
+
+.profile-image{
+  width: 100px;
+  height: 75px;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: cover;
+}
+
+.profile-image-holder {
+  width: 100px;
+  height: 75px;
+  background: rgb(67,70,110);
+}
+
+.profile-login-image-holder {
+  width: 100px;
+  height: 75px;
+  padding-left: 25px;
+  z-index: 5;
+  background: rgb(67,70,110);
+}
+
+.profile-app-title {
+  background: rgb(38,40,70);
+  color: rgba(93, 214, 210, 0.85);
+  font-size: .75em;
+  padding-left: 10px;
+  height: 75px;
+  line-height: 64px;
+}

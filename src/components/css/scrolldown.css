@@ -1,0 +1,31 @@
+.scrolldown-container {
+  background: rgb(67,70,110);
+  z-index: 10;
+}
+
+.scrolldown-container-placeholder {
+  background: rgb(45,47,74);
+  height: 95px;
+}
+
+.scrolldown-image {
+  margin-left: 2.25em;
+  margin-top: -25px;
+  height: 95px;
+  width: 50px;
+  background-image: url(../assets/double-arrows.png);
+  background-size: cover;
+  background-repeat: no-repeat;
+}
+
+.scroll-image-container {
+  overflow-y: visible;
+}
+
+.scroll-text {
+  padding-top: 1em;
+  color: white;
+  padding-left: 1.25em;
+  padding-bottom: 0.70em;
+  font-size:0.75em;
+}
